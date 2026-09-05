@@ -1,0 +1,58 @@
+
+\documentclass[12pt]{article}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{minted}
+\usepackage{enumerate}
+\usepackage{fancyvrb}
+\usepackage[top=1in, bottom=1in, left=1in, right=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{placeins}
+\usepackage{tikz}
+\usepackage{tikzsymbols}
+\usepackage{todonotes}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+
+\usetikzlibrary{positioning,calc}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\blackcircle}{\tikz\draw[black,fill=black] (0,0) circle (1ex);}
+\renewcommand{\circle}{\tikz\draw[black] (0,0) circle (1ex);}
+
+
+%-------------------------------------------------------------------------------
+% Custom commands
+\usepackage{xcolor} %hilight
+\newcommand{\hilight}[1]{\colorbox{yellow}{#1}}
+%-------------------------------------------------------------------------------
+
+%%BEGINSOLUTION
+% To delete solutions from the TeX file, do:
+% sed '/\%\%BEGINSOLUTION/,/\%\%ENDSOLUTION/d' main.tex > out.tex
+%%ENDSOLUTION
+\newtcolorbox[]{solution}[1][]{%
+    breakable,
+    enhanced,
+    colback=white,
+    title=Solution,
+    #1
+}
+
+
+\begin{document}
+
+
+Here we want:
+
+\begin{itemize}
+    \item policy gradients, AC with discrete and continuous actions, NPG
+    
+\end{itemize}
+
+I think we are iun good shape, we just need to merge main.tex and NPG.tex of previous year.
+
+
+\end{document}

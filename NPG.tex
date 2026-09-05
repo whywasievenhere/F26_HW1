@@ -1,0 +1,198 @@
+\documentclass[12pt]{article}
+\usepackage[colorinlistoftodos]{todonotes}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{enumerate}
+\usepackage{fancyvrb}
+\usepackage[top=1in, bottom=1in, left=1in, right=1in]{geometry}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan,
+}
+\usepackage{placeins}
+\usepackage{tikz}
+\usepackage{tikzsymbols}
+\usepackage{todonotes}
+\usepackage{bbm}
+\usepackage{color}
+\usepackage{mathrsfs}
+\usepackage{enumitem}
+\usepackage{algorithmicx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% \renewcommand{\theenumi}{\roman{enumi}}
+\newcommand{\rmn}[1]{{\textcolor{blue}{\bf [{\sc rmn:} #1]}}}
+\DeclareMathOperator*{\argmax}{arg\,max}
+
+\usetikzlibrary{positioning,calc}
+%%%%%%%%%
+\usepackage[most]{tcolorbox}
+\newtcolorbox[]{solution}[1][]{%
+    breakable,
+    enhanced,
+    colback=white,
+    title=Solution,
+    #1
+}
+%%%%%%%%%%
+\title{10-403 Deep Reinforcement Learning and Control\\
+  Optional Homework: Natural Policy Gradient\\
+  Spring 2019\\
+}
+
+\date{April 7, 2019\\
+  \hspace{1cm}\\
+Due by 11:59 PM on April 29th, 2019}
+
+\begin{document}
+
+\maketitle
+\noindent
+\section*{Instructions}
+
+You may work in teams of \textbf{3} on this assignment. Only one person should submit the writeup and code on Gradescope. Additionally, the same person who submitted the writeup to Gradescope must upload a single file with the consolidated code to Autolab.  Make sure you mark your teammates as collaborators on Gradescope (you do not need to do this in Autolab) and that all names are listed in the writeup.  Writeups should be typeset in \LaTeX and submitted as PDF. All code, including auxiliary scripts used for testing, should be submitted with a README.  Please limit your writeup to 8 pages or less (excluding the provided instructions).
+
+We've provided some code templates that you can use if you wish. Abiding to the function signatures defined in these templates is not mandatory; you can write your code from scratch if you wish. You can use any deep learning package of your choice (e.g., Keras, Tensorflow, PyTorch). You should not need the cluster or a GPU for this assignment. The models are small enough that you can train on a laptop CPU.
+
+It is expected that all of the work you submit is your own. Submitting a classmate's code or code which copied from online and claiming it is your own is not allowed. Anyone who does this will be violating University policy, and risks failure of the assignment, course and possibly disciplinary action taken by the university.
+
+\section*{Environment}
+For this assignment, you will work with the \texttt{Pushing2D-v0} environment, the same environment that you used for Homework 5.  To recap, in order to make the environment using \texttt{gym}, you can use the following code:
+\begin{quote}
+\begin{verbatim}
+import gym
+import envs
+
+env = gym.make('Pushing2D-v0')
+\end{verbatim}
+\end{quote}
+Then you can interact with the environment as you usually do.
+
+An overview of the environment is available in the \href{https://docs.google.com/presentation/d/1ueiyyXN_v7h_4GGa4NtMBau0Du1wpZstS3pfJIds37U/edit?usp=sharing}{recitation slides}.  The environment is considered ``solved'' once the percent successes (i.e., the box reaches the goal within the episode) reaches $95\%$. 
+
+
+
+\section*{Problem 1: Actor-Critic in Continuous Action Spaces}
+\ \\
+In Homework 5, you were asked to implement DDPG, which outputs a deterministic action per input state.  For this homework, you will implement actor-critic where the the output of your actor network will instead be the parameters of a normal distribution, i.e., mean and variance of a Gaussian for each action dimension.  You can assume that the action dimensions are independent, so that the covariance matrix of your output multivariate distribution $\Sigma$ is a diagonal matrix.  The algorithm you should implement is shown in Algorithm~\ref{alga2c}.  
+
+\begin{algorithm}
+\label{alga2c}
+\caption{Actor-Critic with Generalized Advantage Estimation\label{a2c}}
+\begin{algorithmic}[1]
+\Procedure{Actor-Critic}{}
+\State $\textit{Start with policy model } \pi_\theta \textit{ and value model } V_\omega$
+\State $\textit{Let } B_{actor} \textit{ and } B_{critic} \textit{ be the batch size used for the actor and critic updates.}$
+\State $\textbf{repeat:}$
+\State $\qquad\textit{Generate } B_{actor} \textit{ transitions } S_0, A_0, r_0, \ldots, S_{B_{actor}-1}, A_{B_{actor}-1}, r_{B_{actor}-1} \textit{ from } \pi_\theta(\cdot)$
+\State $\qquad\textit{Calculate the generalized advantage estimate } A_t^{GAE} \textit{ and returns } R_t $
+\State $\qquad\qquad\textit{for the transitions.}$
+\State $\qquad\textbf{for } b \textit{ in } \{1,\ldots, \lfloor B_{actor}/B_{critic}\rfloor\}$:
+\State $\qquad\qquad L(\omega) = \frac{1}{B_{critic}} \sum_{t=(b-1)B_{critic}}^{bB_{critic}-1} (R_t - V_\omega(S_t))^2$
+\State $\qquad\qquad\textit{Optimize } V_\omega \textit{ using } \nabla L(\omega)$
+\State $\qquad L(\theta) = \frac{1}{B_{actor}} \sum_{t=0}^{B_{actor}-1} A_t^{GAE} \log \pi_\theta(A_t | S_t)$
+\State $\qquad\textit{Optimize } \pi_\theta \textit{ using } \nabla L(\theta)$
+
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+This algorithm should look very similar to the N-Step Advantage Actor Critic that you implemented in Homework 3.  The main differences are as follows:
+\begin{enumerate}
+    \item You will use the generalized advantage estimate instead of the regular N-step boostrapped advantage estimate.  
+    \item Instead of performing an update to the actor and the critic after every episode, you will be updating the actor and critic using fixed batch sizes of transitions.  In particular, you will be updating the critic more often the the actor, hence the inner loop in lines 8--10.  
+\end{enumerate}
+
+The generalized advantage estimate \cite{schulman2015high} further reduces the variance of the policy gradient updates at the cost of some bias.  However, in practice, the additional reduction in variance seems to help learning more than the harm from the additional bias.  The generalized advantage estimates can be computed as 
+\[A_t^{GAE} = \sum_{l=0}^\infty (\lambda\gamma)^l\delta_{l+t}\]
+where $\delta_{t} = r_t-\gamma V_\omega(S_{t+1}) - V_\omega(S_t)$.  The additional discount factor $\lambda$ controls the falloff of the magnitude of contributions from additional $\delta$ terms in the advantage.  Notice that this is not equivalent to the regular advantage estimate since only the $\gamma$ discount is applied to the $\delta's$.  
+
+There are two other tricks you should implement to stabilize training:
+\begin{enumerate}
+    \item Standardize the advantage estimates, i.e., subtract the mean from each advantage estimate and then divide by the standard deviation of the advantages.  
+    \item Standardize the states.  You can do this by keeping a running estimate of the mean and standard deviation of the states.
+\end{enumerate}
+
+Similar to Homework 5, a simple fully connected network with 2 layers should suffice.  Some hyperparameter suggestions include: 
+\begin{enumerate}
+    \item Use an actor batch size of at least 1024 (2048 recommended) and perform at least 4 critic updates per actor update (256 recommended for critic batch size).
+    \item Use $\lambda=0.95$ and $\gamma=0.99$.
+    \item Use two hidden layers with 128 units in each layer.
+    \item Use tanh activation for the two hidden layers.
+\end{enumerate}
+
+Train your implementation on the \texttt{Pushing2D-v0} environment and see if you can get vanilla policy gradient to solve the environment without the natural gradient in Part 2\footnote{\texttt{Pushing2D-v0} is considered solved if your implementation can reach the goal at least 95\% of the time.}, and answer the following questions:
+
+\begin{enumerate}
+\item Describe your implementation, including the optimizer and any hyperparameters you used (learning rate, $\gamma$, etc.).
+ \begin{solution}
+\end{solution}
+\item  Plot the learning curve: Every $k$ episodes, freeze the current cloned policy and run 100 test episodes, recording the mean/std of the cumulative reward. Plot the mean cumulative reward $\mu$ on the y-axis with $\pm \sigma$ standard deviation as error-bars vs. the number of training episodes.  You don't need to use the noise process $\mathcal{N}$ when testing.
+
+Hint: You can use matplotlib's \texttt{plt.errorbar()} function. \url{https://matplotlib.org/api/\_as\_gen/matplotlib.pyplot.errorbar.html}
+ \begin{solution}
+\end{solution}
+\end{enumerate}
+
+
+\section*{Problem 2: Natural Policy Gradient with Actor-Critic}
+\ \\
+In this section, you will extend your implementation in Problem 1 to allow for natural gradients (i.e., train with a KL-divergence constraint to bound the change in the policy update).  The natural policy gradient algorithm you will implement is the same as Algorithm~\ref{alga2c} except the gradient update for the actor is
+\[\theta \rightarrow \theta - \alpha H^{-1}
+g\] 
+where $g$ is the gradient of the policy gradient objective and $\alpha = \sqrt{\frac{2\epsilon}{g^TH^{-1}g}}$ is the learning rate needed to guarantee the KL-divergence constraint that $D_{KL}(\pi_{\theta_{old}},\pi_\theta)<\epsilon$.  
+
+You'll start by deriving two equations that you will use in 
+your implementation.
+\begin{enumerate}
+    \item Show that the KL-divergence of two univariate normal distributions with $p(x)\sim \mathcal{N}(\mu_1, \sigma_1)$ and $q(x)\sim \mathcal{N}(\mu_2,\sigma_2)$ is 
+    \[
+    D_{KL}(p, q) = \log(\frac{\sigma_2}{\sigma_1}) + \frac{\sigma_1^2 + (\mu_1-\mu_2)^2}{2\sigma_2^2} - \frac{1}{2}\]
+    \begin{solution}
+    
+    \end{solution}
+    \item Let $f(x): \mathbf{R}^d \rightarrow \mathcal{R}$ and $u\in \mathbf{R}^d$.  Show that
+    \[\nabla^2f(x)u = \nabla[\nabla(f(x)^T u].\]
+    \begin{solution}
+    
+    \end{solution}
+\end{enumerate}
+
+There are two computational issues to note when implementing NPG:
+\begin{enumerate}
+    \item We need to invert the Fisher Information matrix in order to calculate the natural direction (i.e., $H^{-1}\nabla g)$.  Solving the inverse exactly costs $O(d^3)$, where $d$ is the dimension of the weights $\theta$.  This quickly grows infeasible for even just thousands of weights.  
+    \item The Fisher Information matrix can grow large very fast and is memory intensive to store.
+\end{enumerate}
+
+In order to calculate $H^{-1}g$ efficiently, we turn to the \href{https://en.wikipedia.org/wiki/Conjugate_gradient_method}{conjugate gradient method}.  Let $v = H^{-1}g$, then $Hv = g$.  Hence, if we can compute $g$ and $H$, then we can find the natural gradient direction by solving a system of linear equations for our variable $v$.  While this avoids the costly inversion of $H$, it doesn't resolve the issue of the cost of forming $H$ in the first place.  
+
+However, note that we always interact with $H$ via a matrix vector product, i.e., via $Hv$ in the inner loop of conjugate gradient in order to estimate $H^{-1}g$. As you will show in problem 2 above, we do not need to form the full Hessian matrix before taking the matrix vector product; we can take the gradient of $\nabla D_{KL}(\pi_{\theta_{old}},\pi_\theta)^Tv$.  Hence, we only need to compute the gradient of $D_{KL}(\pi_{\theta_{old}},\pi_\theta)$, dot that with our vector $v$ and then take the gradient of the dot product, without ever actually forms the full matrix $H$.  You can read more about these two computation tricks in the supplementary material for \cite{DBLP:journals/corr/SchulmanLMJA15}.
+
+A routine for the conjugate gradient (CG) will be provided for you but you do not need to use it if you decide to use PyTorch for your implementation or want to implement CG yourself.  Some utility tensorflow functions are also provided to flatten the gradients so you can multiply them easily and then reshape them once you have the correct update you want to apply to the weights.  Hyperparameters for NPG are the same as those provided for vanilla policy gradient with the edition of $\epsilon=0.01$ for the KL constraint and critic learning rate of $3e-4$.
+
+After you have your implementation working, run NPG to convergence and respond to the following prompts:
+\begin{enumerate}
+\item Describe the hyperparameter settings that you used to train NPG.  Ideally, these should match the hyperparameters you used in Part 1 so we can isolate the impact of the NPG component.
+ \begin{solution}
+\end{solution}
+\item  Plot the learning curve: Every $k$ episodes, freeze the current cloned policy and run 100 test episodes, recording the mean/std of the cumulative reward. Plot the mean cumulative reward $\mu$ on the y-axis with $\pm \sigma$ standard deviation as error-bars vs. the number of training episodes.  Do this on the same axes as the curve from Part 1 so that you can compare the two curves.  
+ \begin{solution}
+\end{solution}
+\item How did you expect NPG to perform compared to vanilla policy gradient and why?  How does your observed training curve for the two methods compare?  If you did not observe better performance for NPG, why do you think that was the case?
+\begin{solution}
+\end{solution}
+\end{enumerate}
+
+\section*{General Advice}
+\ \\
+This homework is much more challenging to implement than previous homeworks.  To make debugging easier, you should implement your code piecewise and test each component as you build up your implementation, i.e., test the generalized advantage estimate, test the data standardization, test the calculation of the KL-divergence, test the calculation of the Hessian vector product, etc.
+%\nocite{*}
+\bibliographystyle{plain}
+\bibliography{deeprlhw2}
+
+\end{document}
+
