@@ -51,12 +51,15 @@ class PolicyGradient(nn.Module):
             nn.Linear(state_size, hidden_layer_size),
             nn.ReLU(),
             # BEGIN STUDENT SOLUTION
+            nn.Linear(hidden_layer_size, 1)
             # END STUDENT SOLUTION
         )
 
         # initialize networks, optimizers, move networks to device
         # BEGIN STUDENT SOLUTION
-        pass
+        self.to(self.device)
+        self.optimizer_actor = optim.Adam(self.actor.parameters(), lr=lr_actor)
+        self.optimizer_critic = optim.Adam(self.critic.parameters(), lr=lr_critic)
         # END STUDENT SOLUTION
 
     def forward(self, state):
@@ -65,13 +68,51 @@ class PolicyGradient(nn.Module):
     def get_action(self, state, stochastic):
         # if stochastic, sample using the action probabilities, else get the argmax
         # BEGIN STUDENT SOLUTION
-        pass
+        with torch.no_grad():
+            state_tensor = torch.as_tensor(
+                np.asarray(state, dtype=np.float32), device=self.device
+            ).unsqueeze(0)
+            log_probs = self.actor(state_tensor)
+            if stochastic:
+                # Categorical re-normalizes with log_softmax, which is
+                # idempotent on the already-log-softmaxed actor output.
+                action = torch.distributions.Categorical(logits=log_probs).sample()
+            else:
+                action = torch.argmax(log_probs, dim=-1)
+        return int(action.item())
         # END STUDENT SOLUTION
+
+    def __discounted_reverse_cumsum(self, rewards_tensor):
+ 
+        T = rewards_tensor.shape[0]
+        steps = torch.arange(T, dtype=torch.float64, device=rewards_tensor.device)
+        disc = self.gamma**steps
+        discounted = disc * rewards_tensor.to(torch.float64)
+
+        fwd_cumsum = torch.cumsum(discounted, dim=0)
+        total_sum = fwd_cumsum[-1]
+        C = total_sum - fwd_cumsum + discounted
+        
+        return C, disc
 
     def calculate_n_step_bootstrap(self, rewards_tensor, values):
         # calculate n step bootstrap
         # BEGIN STUDENT SOLUTION
-        pass
+        T = rewards_tensor.shape[0]
+        device = rewards_tensor.device
+        n = self.n if self.n and self.n > 0 else T
+
+        n = min(n, T)
+        C, disc = self.__discounted_reverse_cumsum(rewards_tensor)
+
+        values_flat = values.detach().reshape(-1).to(torch.float64)
+        pad = torch.zeros(n, dtype=torch.float64, device=device)
+        C_padded = torch.cat([C, pad])
+        values_padded = torch.cat([values_flat, pad])
+        idx = torch.arange(T, device=device) + n
+        reward_window = (C - C_padded[idx]) / disc
+        bootstrap = (self.gamma**n) * values_padded[idx]
+        return (reward_window + bootstrap).to(rewards_tensor.dtype)
         # END STUDENT SOLUTION
 
     def train(self, states=None, actions=None, rewards=None):
@@ -82,7 +123,29 @@ class PolicyGradient(nn.Module):
 
         # train the agent using states, actions, and rewards
         # BEGIN STUDENT SOLUTION
-        pass
+
+        states_tensor = torch.as_tensor(np.asarray(states, dtype=np.float32), device=self.device)
+        actions_tensor = torch.as_tensor(np.asarray(actions, dtype=np.int64), device=self.device)
+        rewards_tensor = torch.as_tensor(np.asarray(rewards, dtype=np.float32), device=self.device)
+
+        log_probs = self.actor(states_tensor).gather(1, actions_tensor.unsqueeze(1)).squeeze(1)
+
+        if self.mode == "A2C":
+            values = self.critic(states_tensor).squeeze(-1)
+            returns = self.calculate_n_step_bootstrap(rewards_tensor, values)
+            advantages = returns - values.detach()
+
+        actor_loss = -(advantages.detach() * log_probs).mean()
+        self.optimizer_actor.zero_grad()
+        actor_loss.backward()
+        self.optimizer_actor.step()
+
+        if values is not None:
+            critic_loss = F.mse_loss(values, returns.detach())
+            self.optimizer_critic.zero_grad()
+            critic_loss.backward()
+            self.optimizer_critic.step()
+
         # END STUDENT SOLUTION
 
     def run(self, env, max_steps, num_episodes, train):
@@ -90,7 +153,32 @@ class PolicyGradient(nn.Module):
 
         # run the agent through the environment num_episodes times for at most max steps
         # BEGIN STUDENT SOLUTION
-        pass
+        for _ in range(num_episodes):
+            # No per-episode seed: the env is seeded once per trial, so
+            # successive episodes advance the same RNG stream.
+            state, _ = env.reset()
+            states, actions, rewards = [], [], []
+            episode_reward = 0.0
+
+            for _ in range(max_steps):
+                # Stochastic while training, greedy while evaluating.
+                action = self.get_action(state, stochastic=train)
+                next_state, reward, terminated, truncated, _ = env.step(action)
+
+                states.append(state)
+                actions.append(action)
+                rewards.append(float(reward))
+                episode_reward += float(reward)
+
+                state = next_state
+                if terminated or truncated:
+                    break
+
+            # undiscounted return
+            total_rewards.append(episode_reward)
+
+            if train:
+                self.train(states, actions, rewards)
         # END STUDENT SOLUTION
         return total_rewards
 
@@ -111,7 +199,24 @@ def graph_agents(
 
     # graph the data mentioned in the homework pdf
     # BEGIN STUDENT SOLUTION
-    pass
+    graph_dir = Path(__file__).resolve().parent / "graphs"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+
+    num_evals = num_episodes // graph_every
+    D = np.zeros((len(agents), num_evals))
+
+    for trial_idx, agent in enumerate(agents):
+        for eval_idx in range(num_evals):
+            agent.train()
+            agent.run(env, max_steps, graph_every, train=True)
+
+            agent.train(False)
+            test_rewards = agent.run(env, max_steps, num_test_episodes, train=False)
+            D[trial_idx, eval_idx] = np.mean(test_rewards)
+
+    average_total_rewards = D.mean(axis=0)
+    min_total_rewards = D.min(axis=0)
+    max_total_rewards = D.max(axis=0)
     # END STUDENT SOLUTION
 
     # plot the total rewards
@@ -175,7 +280,15 @@ def main():
 
     # init args, agents, and call graph_agents on the initialized agents
     # BEGIN STUDENT SOLUTION
-    pass
+    env = gym.make(args.env_name)
+    state_size = env.observation_space.shape[0]
+    action_size = env.action_space.n
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    agents = [ PolicyGradient( state_size, action_size, mode=args.mode, n=args.n, device=device) for _ in range(args.num_runs) ]
+    graph_agents( args.mode, agents, env, args.max_steps, args.num_episodes, args.num_test_episodes, args.graph_every)
+    env.close()
     # END STUDENT SOLUTION
 
 
