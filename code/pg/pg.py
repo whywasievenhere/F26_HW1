@@ -131,7 +131,11 @@ class PolicyGradient(nn.Module):
 
         log_probs = self.actor(states_tensor).gather(1, actions_tensor.unsqueeze(1)).squeeze(1)
 
-        if self.mode == "A2C":
+        values = None
+        if self.mode == "REINFORCE":
+            returns = self.calculate_n_step_bootstrap(rewards_tensor, torch.zeros_like(rewards_tensor))
+            advantages = returns
+        elif self.mode == "A2C":
             values = self.critic(states_tensor).squeeze(-1)
             returns = self.calculate_n_step_bootstrap(rewards_tensor, values)
             advantages = returns - values.detach()
