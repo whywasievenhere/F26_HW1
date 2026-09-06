@@ -43,6 +43,7 @@ class PolicyGradient(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_layer_size, action_size),
             # BEGIN STUDENT SOLUTION
+            nn.LogSoftmax(dim=-1),
             # END STUDENT SOLUTION
         )
 
