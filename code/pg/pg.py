@@ -136,6 +136,11 @@ class PolicyGradient(nn.Module):
             C, disc = self.__discounted_reverse_cumsum(rewards_tensor)
             returns = (C / disc).to(rewards_tensor.dtype)
             advantages = returns
+        elif self.mode == "REINFORCE_WITH_BASELINE":
+            C, disc = self.__discounted_reverse_cumsum(rewards_tensor)
+            returns = (C / disc).to(rewards_tensor.dtype)
+            values = self.critic(states_tensor).squeeze(-1)
+            advantages = returns - values.detach()
         elif self.mode == "A2C":
             values = self.critic(states_tensor).squeeze(-1)
             returns = self.calculate_n_step_bootstrap(rewards_tensor, values)
