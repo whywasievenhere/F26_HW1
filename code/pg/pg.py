@@ -101,7 +101,7 @@ class PolicyGradient(nn.Module):
         # BEGIN STUDENT SOLUTION
         T = rewards_tensor.shape[0]
         device = rewards_tensor.device
-        n = self.n if self.n and self.n > 0 else T
+        n = self.n if self.n > 0 else T
 
         n = min(n, T)
         C, disc = self.__discounted_reverse_cumsum(rewards_tensor)
