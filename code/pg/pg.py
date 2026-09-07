@@ -101,7 +101,7 @@ class PolicyGradient(nn.Module):
         # BEGIN STUDENT SOLUTION
         T = rewards_tensor.shape[0]
         device = rewards_tensor.device
-        n = self.n if self.n > 0 else T
+        n = self.n if self.n and self.n > 0 else T
 
         n = min(n, T)
         C, disc = self.__discounted_reverse_cumsum(rewards_tensor)
@@ -133,7 +133,8 @@ class PolicyGradient(nn.Module):
 
         values = None
         if self.mode == "REINFORCE":
-            returns = self.calculate_n_step_bootstrap(rewards_tensor, torch.zeros_like(rewards_tensor))
+            C, disc = self.__discounted_reverse_cumsum(rewards_tensor)
+            returns = (C / disc).to(rewards_tensor.dtype)
             advantages = returns
         elif self.mode == "A2C":
             values = self.critic(states_tensor).squeeze(-1)
